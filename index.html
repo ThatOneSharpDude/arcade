@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fox@edge arcade</title>
+<meta name="description" content="Seven small games in one page: make a market, fair price, the Kelly coin, four in a row, unbeatable tic-tac-toe, mines and meet day.">
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c232c; --line: #30363d;
+    --text: #e6edf3; --dim: #8b949e; --green: #00ff9c; --blue: #00b4ff;
+    --purple: #a87fff; --red: #ff5f56; --yellow: #ffbd2e;
+    --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--mono); }
+  body { padding: 24px 16px 48px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  a { color: var(--blue); }
+  .term { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+  .bar { display: flex; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--panel2); }
+  .bar i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .bar i:nth-child(1) { background: var(--red); } .bar i:nth-child(2) { background: var(--yellow); }
+  .bar i:nth-child(3) { background: #27c93f; }
+  .bar span { margin-left: 8px; color: var(--dim); font-size: 12px; }
+  .prompt { padding: 14px 16px 4px; margin: 0; color: var(--dim); white-space: pre-wrap; }
+  .prompt b { color: var(--green); font-weight: normal; }
+  nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 14px; }
+  nav a { text-decoration: none; color: var(--dim); border: 1px solid var(--line); border-radius: 6px;
+          padding: 4px 10px; font-size: 13px; transition: color .15s, border-color .15s, background .15s; }
+  nav a:hover { color: var(--text); border-color: var(--dim); }
+  nav a.on { color: var(--bg); background: var(--green); border-color: var(--green); }
+  main { border-top: 1px solid var(--line); padding: 18px 16px 22px; min-height: 420px; }
+  h2 { margin: 0 0 4px; font-size: 18px; color: var(--green); font-weight: 600; }
+  .sub { color: var(--dim); margin: 0 0 16px; font-size: 13px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0; }
+  .card { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 12px 14px; }
+  .big { font-size: 22px; color: var(--text); }
+  .dim { color: var(--dim); } .g { color: var(--green); } .r { color: var(--red); } .b { color: var(--blue); }
+  .y { color: var(--yellow); } .p { color: var(--purple); }
+  button, input { font: inherit; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+           padding: 7px 14px; cursor: pointer; transition: border-color .15s, background .15s, transform .05s; }
+  button:hover:not(:disabled) { border-color: var(--green); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:focus-visible, input:focus-visible, nav a:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.go { background: var(--green); color: var(--bg); border-color: var(--green); font-weight: 600; }
+  input[type=number] { width: 92px; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+                       border-radius: 6px; padding: 7px 9px; }
+  input[type=range] { width: 200px; accent-color: var(--green); }
+  label { color: var(--dim); font-size: 13px; }
+  .log { margin-top: 12px; font-size: 13px; line-height: 1.6; }
+  .log div { padding: 2px 0; border-bottom: 1px dashed #21262d; }
+  .stats { display: flex; flex-wrap: wrap; gap: 10px; }
+  .stat { min-width: 110px; }
+  .stat .k { color: var(--dim); font-size: 12px; } .stat .v { font-size: 18px; }
+  canvas { width: 100%; height: 180px; display: block; }
+  /* boards */
+  .c4 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; background: #0b2a4a; padding: 8px;
+        border-radius: 10px; width: min(100%, 420px); }
+  .c4 button { aspect-ratio: 1; border-radius: 50%; padding: 0; background: var(--bg); border: 0; }
+  .c4 button.p1 { background: var(--green); } .c4 button.p2 { background: var(--purple); }
+  .c4 button.win { box-shadow: 0 0 0 3px var(--yellow) inset; }
+  .ttt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: min(100%, 300px); }
+  .ttt button { aspect-ratio: 1; font-size: 40px; padding: 0; background: var(--bg); }
+  .ttt button.x { color: var(--green); } .ttt button.o { color: var(--purple); }
+  .ttt button.win { border-color: var(--yellow); }
+  .mines { display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; width: min(100%, 380px); user-select: none; }
+  .mines button { aspect-ratio: 1; padding: 0; font-size: 15px; border-radius: 4px; background: var(--panel2); }
+  .mines button.open { background: var(--bg); border-color: #21262d; cursor: default; }
+  .mines button.boom { background: var(--red); color: var(--bg); }
+  .n1 { color: var(--blue); } .n2 { color: var(--green); } .n3 { color: var(--red); } .n4 { color: var(--purple); }
+  .n5 { color: var(--yellow); } .n6, .n7, .n8 { color: var(--text); }
+  footer { margin-top: 14px; color: var(--dim); font-size: 12px; text-align: center; }
+  @media (max-width: 520px) { body { padding: 14px 12px 36px; } .big { font-size: 19px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="term">
+    <div class="bar"><i></i><i></i><i></i><span>fox@edge: ~/arcade</span></div>
+    <p class="prompt"><b>fox@edge</b>:~$ ./arcade --list</p>
+    <nav id="tabs" aria-label="Games"></nav>
+    <main id="stage" aria-live="polite"></main>
+  </div>
+  <footer>seven games, one file, no libraries &middot; <a href="https://github.com/ThatOneSharpDude">github.com/ThatOneSharpDude</a></footer>
+</div>
+
+<script>
+"use strict";
+/* ---------- shared helpers ---------- */
+const $ = (tag, attrs = {}, ...kids) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "on") for (const [ev, fn] of Object.entries(v)) el.addEventListener(ev, fn);
+    else if (k === "class") el.className = v;
+    else if (k === "html") el.innerHTML = v;
+    else el.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null) el.append(kid);
+  return el;
+};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("arcade:" + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("arcade:" + k, JSON.stringify(v)); } catch { /* private mode */ } },
+};
+const d6 = () => 1 + Math.floor(Math.random() * 6);
+const sgn = (x, dp = 2) => (x >= 0 ? "+" : "") + x.toFixed(dp);
+const cls = (x) => (x > 0 ? "g" : x < 0 ? "r" : "dim");
+const header = (title, sub) => [$("h2", {}, title), $("p", { class: "sub" }, sub)];
+const warn = (log, t) => { let w = log.querySelector(".warn"); if (!w) w = $("div", { class: "y warn" }); w.textContent = t; log.prepend(w); };
+const unwarn = (log) => { const w = log.querySelector(".warn"); if (w) w.remove(); };
+const stat = (k, id) => $("div", { class: "card stat" }, $("div", { class: "k" }, k), $("div", { class: "v", id }, "-"));
+
+/* ---------- 1. make a market ---------- */
+function market(el) {
+  const ROUNDS = 10;
+  const sumOf = (n) => () => { const r = Array.from({ length: n }, d6); return { v: r.reduce((a, b) => a + b, 0), show: r.join(" + ") }; };
+  const SCEN = [
+    () => ({ q: "the sum of two dice", ev: 7, roll: sumOf(2) }),
+    () => ({ q: "the sum of three dice", ev: 10.5, roll: sumOf(3) }),
+    () => ({ q: "the higher of two dice", ev: 161 / 36, roll: () => { const a = d6(), b = d6(); return { v: Math.max(a, b), show: `max(${a}, ${b})` }; } }),
+    () => ({ q: "the lower of two dice", ev: 91 / 36, roll: () => { const a = d6(), b = d6(); return { v: Math.min(a, b), show: `min(${a}, ${b})` }; } }),
+    () => ({ q: "the product of two dice", ev: 12.25, roll: () => { const a = d6(), b = d6(); return { v: a * b, show: `${a} x ${b}` }; } }),
+    () => ({ q: "the number of heads in 10 coin flips", ev: 5, roll: () => { const f = Array.from({ length: 10 }, () => Math.random() < 0.5); return { v: f.filter(Boolean).length, show: f.map((h) => (h ? "H" : "T")).join("") }; } }),
+    () => ({ q: "the number of sixes in 12 rolls of a die", ev: 2, roll: () => { const r = Array.from({ length: 12 }, d6); return { v: r.filter((x) => x === 6).length, show: r.join(" ") }; } }),
+    () => { const k = d6(); return { q: `the sum of two dice, and one die already shows ${k}`, ev: k + 3.5, roll: () => { const b = d6(); return { v: k + b, show: `${k} + ${b}` }; } }; },
+  ];
+  let round = 0, real = 0, expd = 0, scen = null;
+  const q = $("div", { class: "card big" });
+  const bid = $("input", { type: "number", step: "0.1", "aria-label": "bid" });
+  const ask = $("input", { type: "number", step: "0.1", "aria-label": "ask" });
+  const btn = $("button", { class: "go", on: { click: quote } }, "quote");
+  const log = $("div", { class: "log" });
+  el.append(...header("make-a-market", "A contract pays $X. Quote a bid and an ask. A sharp who knows the fair value trades against any price on the wrong side of fair. A customer trades at random, more often when you're tight. Tight and centered earns the spread; wide earns nothing; off-center gets picked off."),
+    q, $("div", { class: "row" }, $("label", {}, "bid "), bid, $("label", {}, "ask "), ask, btn),
+    $("div", { class: "stats" }, stat("round", "mm-r"), stat("realized P&L", "mm-p"), stat("expected P&L", "mm-e"), stat("best expected", "mm-b")),
+    log);
+  const best = () => { const b = store.get("mm-best", null); document.getElementById("mm-b").textContent = b === null ? "-" : sgn(b); };
+  function next(focus = true) {
+    scen = SCEN[Math.floor(Math.random() * SCEN.length)]();
+    q.innerHTML = "";
+    q.append($("span", { class: "dim" }, `round ${round + 1}/${ROUNDS}  `), `X = ${scen.q}`);
+    bid.value = ""; ask.value = ""; if (focus) bid.focus();
+  }
+  function refresh() {
+    document.getElementById("mm-r").textContent = `${Math.min(round, ROUNDS)}/${ROUNDS}`;
+    const p = document.getElementById("mm-p"); p.textContent = sgn(real); p.className = "v " + cls(real);
+    const e = document.getElementById("mm-e"); e.textContent = sgn(expd); e.className = "v " + cls(expd);
+    best();
+  }
+  function quote() {
+    if (round >= ROUNDS) return reset();
+    const b = parseFloat(bid.value), a = parseFloat(ask.value);
+    if (!Number.isFinite(b) || !Number.isFinite(a) || b >= a) { warn(log, "Enter a bid strictly below your ask."); return; }
+    unwarn(log);
+    const width = a - b, pCust = Math.max(0, 1 - width / 3), out = scen.roll(), fair = scen.ev;
+    let pnl = 0, ev = pCust * width / 2;
+    const notes = [];
+    if (a < fair) { pnl += a - out.v; ev += a - fair; notes.push(`the sharp lifted your ${a} ask (fair ${fair.toFixed(2)})`); }
+    else if (b > fair) { pnl += out.v - b; ev += fair - b; notes.push(`the sharp hit your ${b} bid (fair ${fair.toFixed(2)})`); }
+    else notes.push(`the sharp passed: fair ${fair.toFixed(2)} was inside your market`);
+    if (Math.random() < pCust) {
+      if (Math.random() < 0.5) { pnl += out.v - b; notes.push(`a customer sold to you at ${b}`); }
+      else { pnl += a - out.v; notes.push(`a customer bought from you at ${a}`); }
+    } else notes.push(width >= 3 ? "no customer: too wide" : "no customer this time");
+    real += pnl; expd += ev; round += 1;
+    log.prepend($("div", {}, $("span", { class: "dim" }, `#${round} X = ${out.show} = ${out.v}. `), notes.join("; ") + ". ",
+      $("span", { class: cls(pnl) }, `round ${sgn(pnl)}`), $("span", { class: "dim" }, ` (expected ${sgn(ev)})`)));
+    if (round >= ROUNDS) {
+      const prev = store.get("mm-best", null);
+      if (prev === null || expd > prev) store.set("mm-best", expd);
+      log.prepend($("div", { class: "b" }, `Done. Expected ${sgn(expd)} is the skill; realized ${sgn(real)} adds the dice. Press quote to play again.`));
+      btn.textContent = "play again";
+    } else next();
+    refresh();
+  }
+  function reset() { round = 0; real = 0; expd = 0; log.innerHTML = ""; btn.textContent = "quote"; next(round > 0 || log.childElementCount > 0); refresh(); }
+  const onKey = (e) => { if (e.key === "Enter" && (e.target === bid || e.target === ask)) quote(); };
+  el.addEventListener("keydown", onKey);
+  reset();
+}
+
+/* ---------- 2. fair price ---------- */
+function fairPrice(el) {
+  const ROUNDS = 10;
+  const toAm = (q) => { const o = q >= 0.5 ? -100 * q / (1 - q) : 100 * (1 - q) / q; return Math.round(o / 5) * 5 || (q >= 0.5 ? -100 : 100); };
+  const imp = (o) => (o < 0 ? -o / (-o + 100) : 100 / (o + 100));
+  const powerFair = (a, b) => { let lo = 0.3, hi = 3; for (let i = 0; i < 60; i++) { const k = (lo + hi) / 2; if (a ** k + b ** k > 1) lo = k; else hi = k; } return a ** ((lo + hi) / 2); };
+  const am = (o) => (o > 0 ? "+" : "") + o;
+  const PAIRS = [["Over", "Under"], ["Home", "Away"], ["Yes", "No"]];
+  let round = 0, score = 0, cur = null;
+  const q = $("div", { class: "card big" });
+  const guess = $("input", { type: "number", step: "0.1", min: "1", max: "99", "aria-label": "your fair probability in percent" });
+  const btn = $("button", { class: "go", on: { click: submit } }, "lock it");
+  const log = $("div", { class: "log" });
+  el.append(...header("fair-price", "The book quotes both sides with its margin baked in. Strip it out: what is the fair chance of the first side? Scored against the power method, which loads more of the margin onto the longshot, the way books actually price."),
+    q, $("div", { class: "row" }, $("label", {}, "fair % "), guess, btn),
+    $("div", { class: "stats" }, stat("round", "fp-r"), stat("score", "fp-s"), stat("best", "fp-b")), log);
+  function next(focus = true) {
+    let a, b;
+    do {
+      const p = 0.15 + 0.7 * Math.random(), m = 0.03 + 0.05 * Math.random();
+      let lo = 0.5, hi = 1;
+      for (let i = 0; i < 60; i++) { const k = (lo + hi) / 2; if (p ** k + (1 - p) ** k > 1 + m) lo = k; else hi = k; }
+      const k = (lo + hi) / 2; a = toAm(p ** k); b = toAm((1 - p) ** k);
+    } while (imp(a) + imp(b) <= 1.01);
+    const [la, lb] = PAIRS[Math.floor(Math.random() * PAIRS.length)];
+    cur = { a, b, la, lb, power: powerFair(imp(a), imp(b)), prop: imp(a) / (imp(a) + imp(b)) };
+    q.innerHTML = "";
+    q.append($("span", { class: "dim" }, `round ${round + 1}/${ROUNDS}  `), `${la} ${am(a)}  /  ${lb} ${am(b)}`,
+      $("div", { class: "sub", style: "margin:6px 0 0" }, `fair chance of ${la}?`));
+    guess.value = ""; if (focus) guess.focus();
+  }
+  function refresh() {
+    document.getElementById("fp-r").textContent = `${Math.min(round, ROUNDS)}/${ROUNDS}`;
+    document.getElementById("fp-s").textContent = score;
+    document.getElementById("fp-b").textContent = store.get("fp-best", "-");
+  }
+  function submit() {
+    if (round >= ROUNDS) return reset();
+    const g = parseFloat(guess.value);
+    if (!Number.isFinite(g) || g <= 0 || g >= 100) { warn(log, "Enter a percent between 0 and 100."); return; }
+    unwarn(log);
+    const ans = cur.power * 100, err = Math.abs(g - ans), pts = Math.max(0, Math.round(100 - 15 * err));
+    const vig = (imp(cur.a) + imp(cur.b) - 1) * 100;
+    score += pts; round += 1;
+    log.prepend($("div", {}, $("span", { class: "dim" }, `#${round} ${cur.la} ${am(cur.a)} / ${cur.lb} ${am(cur.b)} (margin ${vig.toFixed(1)}%). `),
+      `power fair ${ans.toFixed(1)}%, proportional ${(cur.prop * 100).toFixed(1)}%, you ${g}%. `,
+      $("span", { class: pts >= 80 ? "g" : pts >= 40 ? "y" : "r" }, `+${pts}`)));
+    if (round >= ROUNDS) {
+      if (score > store.get("fp-best", -1)) store.set("fp-best", score);
+      log.prepend($("div", { class: "b" }, `Done: ${score}/1000. Press lock it to play again.`));
+      btn.textContent = "play again";
+    } else next();
+    refresh();
+  }
+  function reset() { round = 0; score = 0; log.innerHTML = ""; btn.textContent = "lock it"; next(false); refresh(); }
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === guess) submit(); });
+  reset();
+}
+
+/* ---------- 3. the kelly coin ---------- */
+function kelly(el) {
+  const N = 30, P = 0.6, START = 25, KF = 2 * P - 1;
+  let flips, bank, kb, hist, khist, seq;
+  const slider = $("input", { type: "range", min: "0", max: "100", value: "10", "aria-label": "bet size, percent of bankroll" });
+  const pct = $("span", { class: "b" }, "10%");
+  const heads = $("button", { class: "go", on: { click: () => flip(true) } }, "bet heads");
+  const tails = $("button", { on: { click: () => flip(false) } }, "bet tails");
+  const again = $("button", { on: { click: reset } }, "new coin");
+  const cv = $("canvas", { width: "800", height: "180", "aria-label": "bankroll chart: you vs a Kelly bettor" });
+  const msg = $("div", { class: "log" });
+  slider.addEventListener("input", () => { pct.textContent = slider.value + "%"; });
+  el.append(...header("kelly-coin", `This coin lands heads 60% of the time. You start with $${START} and get ${N} flips. Pick how much of your bankroll to bet each flip. The dashed line is a Kelly bettor on the same flips: always 20% on heads.`),
+    $("div", { class: "row" }, $("label", {}, "bet "), slider, pct, heads, tails, again),
+    $("div", { class: "stats" }, stat("flip", "kc-f"), stat("you", "kc-y"), stat("kelly", "kc-k"), stat("best finish", "kc-b")),
+    $("div", { class: "card", style: "margin-top:10px" }, cv), msg);
+  function draw() {
+    const dpr = window.devicePixelRatio || 1, cw = cv.clientWidth || 800;
+    if (cv.width !== Math.round(cw * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(180 * dpr); }
+    const ctx = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 10 * dpr;
+    ctx.lineWidth = 2.5 * dpr;
+    ctx.clearRect(0, 0, W, H);
+    const top = Math.max(START * 1.5, ...hist, ...khist);
+    const X = (i) => pad + (W - 2 * pad) * i / N, Y = (v) => H - pad - (H - 2 * pad) * v / top;
+    ctx.strokeStyle = "#30363d"; ctx.setLineDash([2, 4]); ctx.beginPath(); ctx.moveTo(pad, Y(START)); ctx.lineTo(W - pad, Y(START)); ctx.stroke();
+    const line = (arr, color, dash) => { ctx.strokeStyle = color; ctx.lineWidth = 2.5 * dpr; ctx.setLineDash(dash.map((x) => x * dpr)); ctx.beginPath();
+      arr.forEach((v, i) => (i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)))); ctx.stroke(); };
+    line(khist, "#a87fff", [6, 5]); line(hist, "#00ff9c", []);
+  }
+  function refresh() {
+    document.getElementById("kc-f").textContent = `${flips}/${N}`;
+    document.getElementById("kc-y").textContent = "$" + bank.toFixed(2);
+    document.getElementById("kc-k").textContent = "$" + kb.toFixed(2);
+    const b = store.get("kc-best", null); document.getElementById("kc-b").textContent = b === null ? "-" : "$" + b.toFixed(2);
+    heads.disabled = tails.disabled = flips >= N || bank < 0.01;
+    draw();
+  }
+  function flip(onHeads) {
+    if (flips >= N || bank < 0.01) return;
+    const h = seq[flips], stake = bank * slider.value / 100, won = h === onHeads;
+    bank = Math.max(0, bank + (won ? stake : -stake)); kb = kb + (h ? 1 : -1) * kb * KF;
+    flips += 1; hist.push(bank); khist.push(kb);
+    msg.prepend($("div", {}, $("span", { class: "dim" }, `#${flips} ${h ? "heads" : "tails"}. `),
+      `You bet $${stake.toFixed(2)} on ${onHeads ? "heads" : "tails"}: `, $("span", { class: won ? "g" : "r" }, won ? "won" : "lost")));
+    if (flips >= N || bank < 0.01) {
+      const prev = store.get("kc-best", null);
+      if (bank >= 0.01 && (prev === null || bank > prev)) store.set("kc-best", bank);
+      msg.prepend($("div", { class: "b" }, bank < 0.01 ? "Busted. Betting too much of your bankroll on a 60% coin still goes broke."
+        : `Done: $${bank.toFixed(2)} vs Kelly $${kb.toFixed(2)}. Kelly bets edge / odds = 2p - 1 = 20%: it grows the bankroll fastest over the long run without ever risking ruin.`));
+    }
+    refresh();
+  }
+  function reset() {
+    flips = 0; bank = START; kb = START; hist = [START]; khist = [START]; msg.innerHTML = "";
+    seq = Array.from({ length: N }, () => Math.random() < P);
+    refresh();
+  }
+  reset();
+}
+
+/* ---------- 4. four in a row ---------- */
+function fourRow(el) {
+  const R = 6, C = 7, ORDER = [3, 2, 4, 1, 5, 0, 6], DEPTH = 5;
+  let g, over, busy, pending = 0;
+  const grid = $("div", { class: "c4", "aria-label": "four in a row board" });
+  const status = $("div", { class: "card" });
+  const tally = store.get("c4", { w: 0, l: 0, d: 0 });
+  el.append(...header("four-in-a-row", "You are green. Drop a disc by clicking a column; four in a line wins. The computer searches five moves ahead."),
+    $("div", { class: "row" }, status, $("button", { on: { click: reset } }, "new game")), grid);
+  const cells = [];
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+    const b = $("button", { "aria-label": `column ${c + 1}`, on: { click: () => play(c) } });
+    cells.push(b); grid.append(b);
+  }
+  const cell = (r, c) => cells[r * C + c];
+  const drop = (c, p) => { for (let r = R - 1; r >= 0; r--) if (!g[r][c]) { g[r][c] = p; return r; } return -1; };
+  const lineAt = (r, c, p) => {
+    for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]]) {
+      const run = [[r, c]];
+      for (const s of [1, -1]) { let rr = r + dr * s, cc = c + dc * s;
+        while (rr >= 0 && rr < R && cc >= 0 && cc < C && g[rr][cc] === p) { run.push([rr, cc]); rr += dr * s; cc += dc * s; } }
+      if (run.length >= 4) return run;
+    }
+    return null;
+  };
+  const full = () => g[0].every(Boolean);
+  function evalBoard() {
+    let s = 0;
+    for (let r = 0; r < R; r++) s += (g[r][3] === 2 ? 3 : g[r][3] === 1 ? -3 : 0);
+    const win = (cs) => { const a = cs.filter((x) => x === 2).length, b = cs.filter((x) => x === 1).length, e = 4 - a - b;
+      if (a && b) return 0; if (a === 3 && e === 1) return 5; if (a === 2 && e === 2) return 2; if (b === 3 && e === 1) return -4; if (b === 2 && e === 2) return -1; return 0; };
+    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++)
+      for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [-1, 1]]) {
+        const er = r + 3 * dr, ec = c + 3 * dc;
+        if (er < 0 || er >= R || ec >= C) continue;
+        s += win([0, 1, 2, 3].map((i) => g[r + i * dr][c + i * dc]));
+      }
+    return s;
+  }
+  function mm(d, maxing, a, b) {
+    if (full()) return 0;
+    if (d === 0) return evalBoard();
+    let best = maxing ? -Infinity : Infinity;
+    for (const c of ORDER) {
+      if (g[0][c]) continue;
+      const p = maxing ? 2 : 1, r = drop(c, p);
+      const v = lineAt(r, c, p) ? (maxing ? 1e5 + d : -1e5 - d) : mm(d - 1, !maxing, a, b);
+      g[r][c] = 0;
+      if (maxing) { best = Math.max(best, v); a = Math.max(a, v); } else { best = Math.min(best, v); b = Math.min(b, v); }
+      if (a >= b) break;
+    }
+    return best;
+  }
+  function cpuCol() {
+    let best = -Infinity, col = ORDER.find((c) => !g[0][c]);
+    for (const c of ORDER) {
+      if (g[0][c]) continue;
+      const r = drop(c, 2);
+      const v = lineAt(r, c, 2) ? 1e6 : mm(DEPTH - 1, false, -Infinity, Infinity);
+      g[r][c] = 0;
+      if (v > best) { best = v; col = c; }
+    }
+    return col;
+  }
+  function paint() { for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) cell(r, c).className = g[r][c] ? "p" + g[r][c] : ""; }
+  function finish(text, key, run) {
+    over = true; tally[key] += 1; store.set("c4", tally); paint();
+    if (run) run.forEach(([r, c]) => cell(r, c).classList.add("win"));
+    say(text);
+  }
+  const say = (t) => { status.textContent = `${t} · you ${tally.w} · cpu ${tally.l} · draw ${tally.d}`; };
+  function play(c) {
+    if (over || busy || g[0][c]) return;
+    const r = drop(c, 1); paint();
+    const run = lineAt(r, c, 1);
+    if (run) return finish("You win.", "w", run);
+    if (full()) return finish("Draw.", "d");
+    busy = true; say("thinking...");
+    pending = setTimeout(() => {
+      const cc = cpuCol(), rr = drop(cc, 2); busy = false; paint();
+      const run2 = lineAt(rr, cc, 2);
+      if (run2) return finish("Computer wins.", "l", run2);
+      if (full()) return finish("Draw.", "d");
+      say("Your move.");
+    }, 30);
+  }
+  function reset() { clearTimeout(pending); g = Array.from({ length: R }, () => Array(C).fill(0)); over = false; busy = false; paint(); say("Your move."); }
+  reset();
+  return () => clearTimeout(pending);
+}
+
+/* ---------- 5. unbeatable tic-tac-toe ---------- */
+function ticTacToe(el) {
+  const LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+  let b, over, youFirst = true;
+  const tally = store.get("ttt", { w: 0, l: 0, d: 0 });
+  const grid = $("div", { class: "ttt" });
+  const status = $("div", { class: "card" });
+  const cells = Array.from({ length: 9 }, (_, i) => $("button", { "aria-label": `square ${i + 1}`, on: { click: () => play(i) } }));
+  grid.append(...cells);
+  el.append(...header("tic-tac-toe", "The computer searches every possible game, so it never loses. The best you can do is a draw. Prove it."),
+    $("div", { class: "row" }, status, $("button", { on: { click: () => { youFirst = !youFirst; reset(); } } }, "swap who starts"), $("button", { on: { click: reset } }, "new game")), grid);
+  const winner = (s) => { for (const l of LINES) if (s[l[0]] && s[l[0]] === s[l[1]] && s[l[0]] === s[l[2]]) return { p: s[l[0]], l }; return null; };
+  function mm(s, turn) {
+    const w = winner(s);
+    if (w) return w.p === "O" ? 10 : -10;
+    if (s.every(Boolean)) return 0;
+    const scores = [];
+    for (let i = 0; i < 9; i++) if (!s[i]) { s[i] = turn; scores.push(mm(s, turn === "O" ? "X" : "O") * 0.9); s[i] = ""; }
+    return turn === "O" ? Math.max(...scores) : Math.min(...scores);
+  }
+  function cpu() {
+    let best = -Infinity, pick = -1;
+    for (let i = 0; i < 9; i++) if (!b[i]) { b[i] = "O"; const v = mm(b, "X"); b[i] = ""; if (v > best) { best = v; pick = i; } }
+    b[pick] = "O";
+  }
+  const say = (t) => { status.textContent = `${t} · you ${tally.w} · cpu ${tally.l} · draw ${tally.d}`; };
+  function paint() { cells.forEach((c, i) => { c.textContent = b[i]; c.className = b[i] === "X" ? "x" : b[i] === "O" ? "o" : ""; }); }
+  function check() {
+    const w = winner(b);
+    if (w) { over = true; const k = w.p === "X" ? "w" : "l"; tally[k] += 1; store.set("ttt", tally); paint();
+      w.l.forEach((i) => cells[i].classList.add("win")); say(w.p === "X" ? "You win?! That should be impossible." : "Computer wins."); return true; }
+    if (b.every(Boolean)) { over = true; tally.d += 1; store.set("ttt", tally); paint(); say("Draw. That is the best result there is."); return true; }
+    return false;
+  }
+  function play(i) {
+    if (over || b[i]) return;
+    b[i] = "X"; if (check()) return;
+    cpu(); if (check()) return;
+    paint(); say("Your move (X).");
+  }
+  function reset() { b = Array(9).fill(""); over = false; if (!youFirst) b[[0, 2, 4, 6, 8][Math.floor(Math.random() * 5)]] = "O"; paint(); say("Your move (X)."); }
+  reset();
+}
+
+/* ---------- 6. mines ---------- */
+function mines(el) {
+  const N = 9, M = 10;
+  let mine, open, flag, started, over, t0, timer, flagMode = false;
+  const grid = $("div", { class: "mines" });
+  const status = $("div", { class: "card" });
+  const mode = $("button", { on: { click: () => { flagMode = !flagMode; mode.textContent = flagMode ? "mode: flag" : "mode: dig"; } } }, "mode: dig");
+  el.append(...header("mines", `${M} mines on a ${N}x${N} field. Numbers count the mines touching a square. Right-click (or switch to flag mode on a phone) to flag. Your first dig is always safe.`),
+    $("div", { class: "row" }, status, mode, $("button", { on: { click: reset } }, "new field")), grid);
+  const cells = [];
+  for (let i = 0; i < N * N; i++) {
+    const b = $("button", { "aria-label": `square ${i + 1}`, on: {
+      click: () => (flagMode ? toggle(i) : dig(i)),
+      contextmenu: (e) => { e.preventDefault(); toggle(i); } } });
+    cells.push(b); grid.append(b);
+  }
+  const nbrs = (i) => { const r = Math.floor(i / N), c = i % N, out = [];
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const rr = r + dr, cc = c + dc;
+      if ((dr || dc) && rr >= 0 && rr < N && cc >= 0 && cc < N) out.push(rr * N + cc); }
+    return out; };
+  const count = (i) => nbrs(i).filter((j) => mine[j]).length;
+  const secs = () => Math.floor((Date.now() - t0) / 1000);
+  function say(t) { const best = store.get("mines-best", null);
+    status.textContent = `${t} · flags ${flag.filter(Boolean).length}/${M} · best ${best === null ? "-" : best + "s"}`; }
+  function place(safe) {
+    const banned = new Set([safe, ...nbrs(safe)]);
+    let left = M;
+    while (left) { const j = Math.floor(Math.random() * N * N); if (!mine[j] && !banned.has(j)) { mine[j] = true; left--; } }
+  }
+  function paint() {
+    cells.forEach((b, i) => {
+      b.className = ""; b.textContent = "";
+      if (open[i]) { b.classList.add("open"); if (mine[i]) { b.textContent = "*"; b.classList.add("boom"); }
+        else { const n = count(i); if (n) { b.textContent = n; b.classList.add("n" + n); } } }
+      else if (flag[i]) { b.textContent = "F"; b.classList.add("y"); }
+      else if (over && mine[i]) b.textContent = "*";
+    });
+  }
+  function toggle(i) { if (over || open[i]) return; flag[i] = !flag[i]; paint(); say(started ? `${secs()}s` : "Dig anywhere."); }
+  function dig(i) {
+    if (over || open[i] || flag[i]) return;
+    if (!started) { place(i); started = true; t0 = Date.now(); timer = setInterval(() => !over && say(`${secs()}s`), 1000); }
+    if (mine[i]) { open[i] = true; over = true; clearInterval(timer); paint(); say("Boom."); return; }
+    const stack = [i];
+    while (stack.length) { const j = stack.pop(); if (open[j] || flag[j]) continue; open[j] = true;
+      if (!count(j)) nbrs(j).forEach((k) => !open[k] && !mine[k] && stack.push(k)); }
+    if (open.filter(Boolean).length === N * N - M) {
+      over = true; clearInterval(timer); const s = secs(), best = store.get("mines-best", null);
+      if (best === null || s < best) store.set("mines-best", s);
+      paint(); say(`Cleared in ${s}s.`); return;
+    }
+    paint(); say(`${secs()}s`);
+  }
+  function reset() { clearInterval(timer); mine = Array(N * N).fill(false); open = Array(N * N).fill(false);
+    flag = Array(N * N).fill(false); started = false; over = false; paint(); say("Dig anywhere."); }
+  reset();
+  return () => clearInterval(timer);
+}
+
+/* ---------- 7. meet day ---------- */
+function meetDay(el) {
+  const LIFTS = [{ n: "squat", max: 405, open: 365 }, { n: "bench", max: 285, open: 255 }, { n: "deadlift", max: 495, open: 445 }];
+  let li, att, best, last, lastGood, raf = 0, pos, dir, speed, zone, lifting;
+  const title = $("div", { class: "card big" });
+  const wt = $("input", { type: "number", step: "5", "aria-label": "attempt weight in pounds" });
+  const go = $("button", { class: "go", on: { click: start } }, "load the bar");
+  const drive = $("button", { on: { click: press }, disabled: "" }, "drive (space)");
+  const track = $("div", { style: "position:relative;height:34px;border:1px solid var(--line);border-radius:6px;background:var(--bg);margin:12px 0;overflow:hidden;max-width:560px" });
+  const zoneEl = $("div", { style: "position:absolute;top:0;bottom:0;background:rgba(0,255,156,.22);border-left:2px solid var(--green);border-right:2px solid var(--green)" });
+  const mark = $("div", { style: "position:absolute;top:3px;bottom:3px;width:6px;margin-left:-3px;border-radius:3px;background:var(--text)" });
+  track.append(zoneEl, mark);
+  const lights = $("div", { class: "big", style: "letter-spacing:6px;min-height:32px" });
+  const log = $("div", { class: "log" });
+  el.append(...header("meet-day", "Squat, bench, deadlift: three attempts each, best of each counts toward your total. Pick the weight, load the bar, then hit drive when the marker is in the green. Heavier means a smaller window and a faster bar. Your listed max is a ~95% day; anything past it is a PR attempt."),
+    title, $("div", { class: "row" }, $("label", {}, "lbs "), wt, go, drive), track, lights,
+    $("div", { class: "stats" }, stat("squat", "md-s"), stat("bench", "md-b"), stat("deadlift", "md-d"), stat("total", "md-t"), stat("best total", "md-bt")), log);
+  const L = () => LIFTS[li];
+  const minNext = () => (last === null ? 45 : lastGood ? last + 5 : last);
+  function refresh() {
+    ["md-s", "md-b", "md-d"].forEach((id, i) => { document.getElementById(id).textContent = best[i] ? best[i] + " lb" : i < li ? "bomb" : "-"; });
+    const tot = best.reduce((a, b) => a + b, 0);
+    document.getElementById("md-t").textContent = tot && (li < 3 || best.every(Boolean)) ? tot + " lb" : "-";
+    const bt = store.get("md-best", null); document.getElementById("md-bt").textContent = bt === null ? "-" : bt + " lb";
+    if (li < 3) {
+      title.innerHTML = "";
+      title.append($("span", { class: "dim" }, `${L().n} · attempt ${att + 1}/3  `), `listed max ${L().max} lb`);
+    }
+  }
+  function start() {
+    if (li >= 3) return reset();
+    if (lifting) return;
+    const w = Math.round(parseFloat(wt.value) / 5) * 5;
+    if (!Number.isFinite(w) || w < minNext()) { warn(log, `Attempt must be at least ${minNext()} lb${lastGood ? " (5 over your last good lift)" : ""}.`); return; }
+    const cap = Math.round(L().max * 1.25 / 5) * 5;
+    if (w > cap) { warn(log, `Max attempt is ${cap} lb for the ${L().n}: that is already a 25% PR.`); return; }
+    unwarn(log);
+    const r = w / L().max;
+    zone = Math.min(0.30, Math.max(0.025, 0.30 - (r - 0.7) * 0.9));   // fraction of the track
+    speed = 0.6 + Math.max(0, r - 0.6) * 2.2;                         // tracks per second
+    const zl = 0.15 + Math.random() * (0.7 - zone);
+    zoneEl.style.left = zl * 100 + "%"; zoneEl.style.width = zone * 100 + "%";
+    zoneEl.dataset.l = zl; pos = 0; dir = 1; lifting = { w, t: performance.now() };
+    lights.textContent = ""; go.disabled = true; drive.disabled = false; setTimeout(() => drive.focus(), 0);
+    const step = (now) => {
+      const dt = Math.min(0.05, (now - lifting.t) / 1000); lifting.t = now;
+      pos += dir * speed * dt;
+      if (pos >= 1) { pos = 1; dir = -1; } else if (pos <= 0) { pos = 0; dir = 1; }
+      mark.style.left = pos * 100 + "%";
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame((t) => { lifting.t = t; step(t); });
+  }
+  function press() {
+    if (!lifting) return;
+    cancelAnimationFrame(raf);
+    const zl = parseFloat(zoneEl.dataset.l), good = pos >= zl && pos <= zl + zone, w = lifting.w;
+    const centre = good ? 1 - Math.abs(pos - (zl + zone / 2)) / (zone / 2) : 0;
+    const whites = good ? (centre > 0.35 ? 3 : 2) : (pos >= zl - 0.03 && pos <= zl + zone + 0.03 ? 1 : 0);
+    lights.innerHTML = "";
+    for (let i = 0; i < 3; i++) lights.append($("span", { class: i < whites ? "w" : "r" }, "●"));
+    if (good) best[li] = Math.max(best[li], w);
+    log.prepend($("div", {}, $("span", { class: "dim" }, `${L().n} ${att + 1}: ${w} lb. `),
+      $("span", { class: good ? "g" : "r" }, good ? `good lift (${whites}/3 white)` : `no lift (${whites}/3 white)`),
+      w > L().max && good ? $("span", { class: "y" }, " PR!") : null));
+    last = w; lastGood = good; lifting = null; att += 1; drive.disabled = true; go.disabled = false;
+    if (att === 3) {
+      li += 1; att = 0; last = null; lastGood = false;
+      if (li < 3) wt.value = L().open;
+    } else wt.value = good ? w + 10 : w;
+    if (li >= 3) {
+      const tot = best.reduce((a, b) => a + b, 0), prev = store.get("md-best", null);
+      if (best.every(Boolean) && (prev === null || tot > prev)) store.set("md-best", tot);
+      title.innerHTML = ""; title.append(best.every(Boolean) ? `Meet over: ${tot} lb total.` : "Meet over: bombed out (a lift with no good attempt means no total).");
+      go.textContent = "new meet";
+    }
+    refresh();
+  }
+  function reset() {
+    cancelAnimationFrame(raf); li = 0; att = 0; best = [0, 0, 0]; last = null; lastGood = false; lifting = null;
+    wt.value = LIFTS[0].open; go.textContent = "load the bar"; go.disabled = false; drive.disabled = true;
+    lights.textContent = ""; log.innerHTML = ""; mark.style.left = "0%"; zoneEl.style.width = "0";
+    refresh();
+  }
+  el.addEventListener("keydown", (e) => {
+    if (e.key === " " && lifting) { e.preventDefault(); press(); }
+    else if (e.key === "Enter" && e.target === wt) { e.preventDefault(); start(); }
+  });
+  reset();
+  return () => cancelAnimationFrame(raf);
+}
+
+/* ---------- router ---------- */
+const GAMES = [
+  { id: "market", name: "make-a-market", run: market },
+  { id: "fair", name: "fair-price", run: fairPrice },
+  { id: "kelly", name: "kelly-coin", run: kelly },
+  { id: "four", name: "four-in-a-row", run: fourRow },
+  { id: "ttt", name: "tic-tac-toe", run: ticTacToe },
+  { id: "mines", name: "mines", run: mines },
+  { id: "meet", name: "meet-day", run: meetDay },
+];
+const tabs = document.getElementById("tabs"), stage = document.getElementById("stage");
+GAMES.forEach((g, i) => tabs.append($("a", { href: "#" + g.id, "data-id": g.id }, `[${i + 1}] ${g.name}`)));
+let cleanup = null, stageRef = stage;
+window.addEventListener("hashchange", routeTo);
+function routeTo() {
+  const id = location.hash.slice(1), game = GAMES.find((g) => g.id === id) || GAMES[0];
+  if (cleanup) cleanup();
+  // a fresh <main> drops every listener the previous game attached to it
+  const fresh = stageRef.cloneNode(false); stageRef.replaceWith(fresh); stageRef = fresh;
+  tabs.querySelectorAll("a").forEach((a) => a.classList.toggle("on", a.dataset.id === game.id));
+  cleanup = game.run(fresh) || null;
+}
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= GAMES.length) location.hash = GAMES[n - 1].id;
+});
+routeTo();
+</script>
+</body>
+</html>
