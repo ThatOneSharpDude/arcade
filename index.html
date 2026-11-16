@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>fox@edge arcade</title>
-<meta name="description" content="Seven small games in one page: make a market, fair price, the Kelly coin, four in a row, unbeatable tic-tac-toe, mines and meet day.">
+<meta name="description" content="Fourteen small games in one page: trading drills (make a market, fair price, Kelly, pot odds, card counting), brain games (four in a row, tic-tac-toe, mines, chess vision) and sports (meet day, PR chase, shootout, home run derby, free throws).">
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --panel2: #1c232c; --line: #30363d;
@@ -25,7 +25,12 @@
   .bar span { margin-left: 8px; color: var(--dim); font-size: 12px; }
   .prompt { padding: 14px 16px 4px; margin: 0; color: var(--dim); white-space: pre-wrap; }
   .prompt b { color: var(--green); font-weight: normal; }
-  nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 14px; }
+  nav { padding: 8px 16px 14px; }
+  nav .grp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+  nav .gl { color: var(--purple); font-size: 12px; width: 44px; }
+  .meter { position: relative; height: 30px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); margin: 8px 0 12px; overflow: hidden; max-width: 560px; }
+  .meter .mz { position: absolute; top: 0; bottom: 0; background: rgba(0,255,156,.22); border-left: 2px solid var(--green); border-right: 2px solid var(--green); }
+  .meter .mm { position: absolute; top: 3px; bottom: 3px; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--text); }
   nav a { text-decoration: none; color: var(--dim); border: 1px solid var(--line); border-radius: 6px;
           padding: 4px 10px; font-size: 13px; transition: color .15s, border-color .15s, background .15s; }
   nav a:hover { color: var(--text); border-color: var(--dim); }
@@ -85,7 +90,7 @@
     <nav id="tabs" aria-label="Games"></nav>
     <main id="stage" aria-live="polite"></main>
   </div>
-  <footer>seven games, one file, no libraries &middot; <a href="https://github.com/ThatOneSharpDude">github.com/ThatOneSharpDude</a></footer>
+  <footer>fourteen games, one file, no libraries &middot; <a href="https://github.com/ThatOneSharpDude">github.com/ThatOneSharpDude</a></footer>
 </div>
 
 <script>
@@ -588,18 +593,418 @@ function meetDay(el) {
   return () => cancelAnimationFrame(raf);
 }
 
+/* ---------- shared bits for the newer games ---------- */
+const meter = () => {
+  const track = $("div", { class: "meter" }), zone = $("div", { class: "mz" }), mark = $("div", { class: "mm" });
+  track.append(zone, mark);
+  return { track, setZone(l, w) { zone.style.left = l * 100 + "%"; zone.style.width = w * 100 + "%"; }, setMark(p) { mark.style.left = p * 100 + "%"; } };
+};
+const docKeys = (fn) => { document.addEventListener("keydown", fn); return () => document.removeEventListener("keydown", fn); };
+const isSpace = (e) => e.key === " " && e.target.tagName !== "INPUT";
+const spaceGuard = () => { const f = (e) => { if (isSpace(e)) e.preventDefault(); }; document.addEventListener("keyup", f); return () => document.removeEventListener("keyup", f); };
+const keyClick = (fn) => (e) => { if (e.detail === 0) fn(); };   // Enter/keyboard activation of a pointer-driven button
+
+/* ---------- 8. pot odds (poker) ---------- */
+function potOdds(el) {
+  const ROUNDS = 10;
+  const DRAWS = [["a flush draw", 9], ["an open-ended straight draw", 8], ["a gutshot straight draw", 4], ["two overcards", 6],
+    ["a flush draw plus an open-ender", 15], ["a flush draw plus a gutshot", 12], ["a pair, drawing to two pair or trips", 5]];
+  const SIZES = [[1 / 3, "a third of the pot"], [1 / 2, "half the pot"], [2 / 3, "two thirds of the pot"], [1, "the size of the pot"], [2, "twice the pot"]];
+  let round = 0, score = 0, cur = null;
+  const q = $("div", { class: "card big" });
+  const call = $("button", { class: "go", on: { click: () => answer(true) } }, "call");
+  const fold = $("button", { on: { click: () => answer(false) } }, "fold");
+  const log = $("div", { class: "log" });
+  el.append(...header("pot-odds", "Call or fold? You have a drawing hand and your opponent bets. Compare your chance to hit (your equity) with the share of the final pot you have to put in. Rule of thumb: outs x 2 per card to come, x 4 with two cards to come."),
+    q, $("div", { class: "row" }, call, fold), $("div", { class: "stats" }, stat("hand", "po-r"), stat("correct", "po-s"), stat("best", "po-b")), log);
+  function next() {
+    const [name, outs] = DRAWS[Math.floor(Math.random() * DRAWS.length)];
+    const [frac, words] = SIZES[Math.floor(Math.random() * SIZES.length)];
+    const pot = 20 * (1 + Math.floor(Math.random() * 10)), bet = Math.round(pot * frac), turn = Math.random() < 0.5;
+    const eq = turn ? outs / 46 : 1 - ((47 - outs) / 47) * ((46 - outs) / 46);
+    cur = { name, outs, pot, bet, turn, eq, need: bet / (pot + 2 * bet), words };
+    q.innerHTML = "";
+    q.append($("span", { class: "dim" }, `hand ${round + 1}/${ROUNDS}  `),
+      `${turn ? "Turn" : "Flop, all-in"}: you have ${name} (${outs} outs). Pot $${pot}, opponent bets $${bet} (${words}).`);
+  }
+  function answer(didCall) {
+    if (round >= ROUNDS) return reset();
+    const good = cur.eq >= cur.need, right = didCall === good || Math.abs(cur.eq - cur.need) < 0.005;
+    const ev = cur.eq * (cur.pot + cur.bet) - (1 - cur.eq) * cur.bet, approx = cur.outs * (cur.turn ? 2 : 4);
+    score += right ? 1 : 0; round += 1;
+    log.prepend($("div", {}, $("span", { class: right ? "g" : "r" }, right ? "right. " : "wrong. "),
+      `Equity ${(cur.eq * 100).toFixed(1)}% (rule of ${cur.turn ? 2 : 4}: ~${approx}%${!cur.turn && cur.outs > 8 ? ", it overstates big draws" : ""}) vs needed ${(cur.need * 100).toFixed(1)}% `,
+      `= $${cur.bet} / ($${cur.pot} + $${cur.bet} + $${cur.bet}). Calling is worth ${sgn(ev)} dollars, so ${good ? "call" : "fold"}.`));
+    if (round >= ROUNDS) {
+      if (score > 0 && score > store.get("po-best", -1)) store.set("po-best", score);
+      log.prepend($("div", { class: "b" }, `Done: ${score}/${ROUNDS}. Press play again.`)); call.textContent = "play again";
+      q.textContent = `Done: ${score}/${ROUNDS} correct.`; fold.disabled = true;
+    } else next();
+    refresh();
+  }
+  function refresh() {
+    document.getElementById("po-r").textContent = `${Math.min(round, ROUNDS)}/${ROUNDS}`;
+    document.getElementById("po-s").textContent = score;
+    document.getElementById("po-b").textContent = store.get("po-best", "-");
+  }
+  function reset() { round = 0; score = 0; log.innerHTML = ""; call.textContent = "call"; fold.disabled = false; next(); refresh(); }
+  reset();
+}
+
+/* ---------- 9. card counting (blackjack, hi-lo) ---------- */
+function counting(el) {
+  const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"], SUITS = ["♠", "♥", "♦", "♣"];
+  const hilo = (r) => ("23456".includes(r) && r !== "10" ? 1 : ["7", "8", "9"].includes(r) ? 0 : -1);
+  let timer = 0, running = 0, shown = 0, n = 20, speed = 900, phase = "idle", decks = 0;
+  const face = $("div", { class: "card", style: "font-size:56px;text-align:center;min-height:96px;line-height:96px;max-width:220px" }, "🂠");
+  const q = $("div", { class: "card" });
+  const ans = $("input", { type: "text", inputmode: "text", autocomplete: "off", "aria-label": "your count", style: "width:92px" });
+  const go = $("button", { class: "go", on: { click: start } }, "deal");
+  const sub = $("button", { on: { click: submit }, disabled: "" }, "submit");
+  const spd = $("button", { on: { click: () => { speed = speed === 900 ? 550 : speed === 550 ? 1300 : 900; spd.textContent = label(); } } }, "");
+  const label = () => `speed: ${speed === 550 ? "fast" : speed === 900 ? "normal" : "slow"}`;
+  spd.textContent = label();
+  const log = $("div", { class: "log" });
+  el.append(...header("card-counting", "Hi-Lo: 2 to 6 count +1, 7 to 9 count 0, tens, faces and aces count -1. Keep the running count in your head as cards flash, then convert to a true count (running count / decks left). Each +1 of true count is worth about +0.5% to the player: that is when a counter bets more, which is Kelly thinking."),
+    $("div", { class: "row" }, face, q), $("div", { class: "row" }, go, spd, $("label", {}, "count "), ans, sub),
+    $("div", { class: "stats" }, stat("streak", "cc-s"), stat("best streak", "cc-b")), log);
+  let streak = 0;
+  function start() {
+    if (phase === "dealing") return;
+    clearInterval(timer); running = 0; shown = 0; phase = "dealing"; go.disabled = true; sub.disabled = true; ans.value = "";
+    q.textContent = "Count...";
+    timer = setInterval(() => {
+      if (shown >= n) { clearInterval(timer); face.textContent = "🂠"; phase = "running"; q.textContent = "Running count?"; sub.disabled = false; ans.focus(); return; }
+      const r = RANKS[Math.floor(Math.random() * 13)], s = SUITS[Math.floor(Math.random() * 4)];
+      running += hilo(r); shown += 1;
+      face.textContent = r + s; face.style.color = s === "♥" || s === "♦" ? "var(--red)" : "var(--text)";
+    }, speed);
+  }
+  function submit() {
+    const v = parseFloat(ans.value);
+    if (!Number.isFinite(v)) return warn(log, "Type a number.");
+    unwarn(log);
+    if (phase === "running") {
+      const ok = v === running;
+      log.prepend($("div", {}, $("span", { class: ok ? "g" : "r" }, ok ? "right. " : "off. "), `Running count was ${running > 0 ? "+" : ""}${running}.`));
+      decks = [1, 1.5, 2, 3, 4, 5][Math.floor(Math.random() * 6)];
+      phase = "true"; ans.value = ""; q.textContent = `Running count ${running > 0 ? "+" : ""}${running}, ${decks} deck${decks === 1 ? "" : "s"} left. True count?`;
+      streak = ok ? streak + 1 : 0;
+    } else if (phase === "true") {
+      const tc = running / decks, ok = Math.abs(v - tc) <= 0.5;
+      log.prepend($("div", {}, $("span", { class: ok ? "g" : "r" }, ok ? "right. " : "off. "),
+        `True count ${tc.toFixed(1)}. ${tc >= 2 ? "Bet more: the deck favors you." : tc <= -1 ? "Minimum bet: the deck favors the house." : "Normal bet."}`));
+      streak = ok ? streak + 1 : 0;
+      if (streak > store.get("cc-best", 0)) store.set("cc-best", streak);
+      phase = "idle"; sub.disabled = true; go.disabled = false; q.textContent = "Deal again.";
+    }
+    document.getElementById("cc-s").textContent = streak;
+    document.getElementById("cc-b").textContent = store.get("cc-best", 0);
+  }
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === ans) submit(); });
+  q.textContent = "Press deal. 20 cards.";
+  document.getElementById("cc-s").textContent = 0; document.getElementById("cc-b").textContent = store.get("cc-best", 0);
+  return () => clearInterval(timer);
+}
+
+/* ---------- 10. chess vision ---------- */
+function chessVision(el) {
+  const FILES = "abcdefgh", SECS = 60;
+  let mode = "color", t0 = 0, timer = 0, score = 0, cur = null, live = false;
+  const sq = () => FILES[Math.floor(Math.random() * 8)] + (1 + Math.floor(Math.random() * 8));
+  const dark = (s) => (FILES.indexOf(s[0]) + Number(s[1])) % 2 === 1;
+  const knight = (a, b) => {
+    const pos = (s) => [FILES.indexOf(s[0]), Number(s[1]) - 1], [tx, ty] = pos(b), seen = new Set([a]);
+    let frontier = [pos(a)], d = 0;
+    while (frontier.length) {
+      if (frontier.some(([x, y]) => x === tx && y === ty)) return d;
+      const nxt = [];
+      for (const [x, y] of frontier) for (const [dx, dy] of [[1, 2], [2, 1], [-1, 2], [-2, 1], [1, -2], [2, -1], [-1, -2], [-2, -1]]) {
+        const nx = x + dx, ny = y + dy, k = FILES[nx] + (ny + 1);
+        if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8 && !seen.has(k)) { seen.add(k); nxt.push([nx, ny]); }
+      }
+      frontier = nxt; d += 1;
+    }
+    return -1;
+  };
+  const q = $("div", { class: "card big", style: "text-align:center" });
+  const opts = $("div", { class: "row" });
+  const status = $("div", { class: "card" });
+  const modeBtn = $("button", { on: { click: () => { if (live) return; mode = mode === "color" ? "knight" : "color"; modeBtn.textContent = "drill: " + mode; idle(); } } }, "drill: color");
+  const go = $("button", { class: "go", on: { click: start } }, "start 60s");
+  el.append(...header("chess-vision", "Blindfold training. Color: is the square light or dark? Knight: fewest knight moves between two squares (click or press 1-6). No board to look at: see it in your head. 60 seconds; a wrong answer costs a point."),
+    $("div", { class: "row" }, modeBtn, go, status), q, opts);
+  const best = () => store.get("cv-" + mode, null);
+  function idle() { q.textContent = mode === "color" ? "e.g. a1 is dark, h1 is light" : "e.g. b1 to c3 is 1 move"; opts.innerHTML = ""; status.textContent = `best ${best() ?? "-"}`; }
+  function ask() {
+    opts.innerHTML = "";
+    if (mode === "color") {
+      const s = sq(); cur = dark(s) ? "dark" : "light"; q.textContent = s;
+      ["light", "dark"].forEach((c) => opts.append($("button", { on: { click: () => pick(c) } }, c)));
+    } else {
+      let a = sq(), b = sq(); while (b === a) b = sq();
+      cur = knight(a, b); q.textContent = `${a} → ${b}`;
+      [1, 2, 3, 4, 5, 6].forEach((k) => opts.append($("button", { on: { click: () => pick(k) } }, String(k))));
+    }
+  }
+  function pick(v) {
+    if (!live) return;
+    score += v === cur ? 1 : -1;
+    q.style.color = v === cur ? "var(--green)" : "var(--red)"; setTimeout(() => { q.style.color = ""; }, 150);
+    ask();
+  }
+  function start() {
+    if (live) return;
+    live = true; score = 0; t0 = Date.now(); go.disabled = true; modeBtn.disabled = true; el.dataset.noshortcut = "1"; ask();
+    timer = setInterval(() => {
+      const left = SECS - Math.floor((Date.now() - t0) / 1000);
+      status.textContent = `${left}s · score ${score}`;
+      if (left <= 0) {
+        clearInterval(timer); live = false; go.disabled = false; modeBtn.disabled = false; opts.innerHTML = "";
+        if (score > 0 && (best() === null || score > best())) store.set("cv-" + mode, score);
+        delete el.dataset.noshortcut;
+        q.textContent = `Time. Score ${score}.`; status.textContent = `best ${best()}`;
+      }
+    }, 200);
+  }
+  const offKeys = docKeys((e) => { const k = parseInt(e.key, 10); if (live && mode === "knight" && k >= 1 && k <= 6) { e.preventDefault(); pick(k); } });
+  idle();
+  return () => { clearInterval(timer); offKeys(); };
+}
+
+/* ---------- 11. pr chase ---------- */
+function prChase(el) {
+  let raf = 0, pct = 0.75, p = 0, rep = 0, t = 0, last = 0, state = "idle", repStart = 0, lowerUntil = 0;
+  const m = meter();
+  const pctIn = $("input", { type: "range", min: "60", max: "95", step: "5", value: "75", "aria-label": "weight as percent of your max" });
+  const pctLab = $("span", { class: "b" }, "75%");
+  const go = $("button", { class: "go", on: { click: start } }, "unrack");
+  const push = $("button", { style: "min-width:140px;touch-action:manipulation", disabled: "" }, "PUSH (space)");
+  const status = $("div", { class: "card big" });
+  const log = $("div", { class: "log" });
+  pctIn.addEventListener("input", () => { pct = pctIn.value / 100; pctLab.textContent = pctIn.value + "%"; });
+  push.addEventListener("pointerdown", (e) => { e.preventDefault(); tap(); });
+  push.addEventListener("click", keyClick(() => tap()));
+  el.append(...header("pr-chase", "Pick a weight as a percent of your max, unrack, then mash PUSH (or space) to drive each rep to lockout before the 5-second clock runs out. Fatigue builds every rep. How many can you grind?"),
+    $("div", { class: "row" }, $("label", {}, "weight "), pctIn, pctLab, go, push), status, m.track,
+    $("div", { class: "stats" }, stat("reps", "pr-r"), stat("best at this %", "pr-b")), log);
+  m.setZone(0.94, 0.06);
+  const best = () => store.get("pr-" + Math.round(pct * 100), null);
+  const grav = () => 0.33 * (pct / 0.75) * (1 + 0.12 * rep);   // bar falls this much per second
+  function tap() {
+    if (state !== "push") return;
+    p = Math.min(1, p + 0.11);
+    if (p >= 1) { rep += 1; state = "lower"; lowerUntil = performance.now() + 450; status.textContent = `rep ${rep} locked out`; }
+  }
+  function loop(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (state === "push") {
+      p = Math.max(0, p - grav() * dt);
+      const left = 5 - (now - repStart) / 1000;
+      status.textContent = `rep ${rep + 1} · ${left.toFixed(1)}s`;
+      if (left <= 0) return finish();
+    } else if (state === "lower") {
+      p = Math.max(0, p - 2.5 * dt);
+      if (now >= lowerUntil) { state = "push"; p = 0; repStart = now; }
+    }
+    m.setMark(p); document.getElementById("pr-r").textContent = rep;
+    raf = requestAnimationFrame(loop);
+  }
+  function start() {
+    if (state !== "idle") return;
+    rep = 0; p = 0; state = "push"; go.disabled = true; pctIn.disabled = true; push.disabled = false;
+    last = performance.now(); repStart = last; raf = requestAnimationFrame(loop);
+  }
+  function finish() {
+    cancelAnimationFrame(raf); state = "idle"; go.disabled = false; pctIn.disabled = false; push.disabled = true;
+    const b = best(); if (rep > 0 && (b === null || rep > b)) store.set("pr-" + Math.round(pct * 100), rep);
+    const est = rep ? (pct * (1 + rep / 30) * 100).toFixed(0) : null;
+    status.textContent = `Failed rep ${rep + 1}. Set done: ${rep} reps.`;
+    log.prepend($("div", {}, `${Math.round(pct * 100)}% x ${rep}`, est ? $("span", { class: "dim" }, ` · Epley: that set says your max is ~${est}% of the max you entered${est > 100 ? " (PR pace!)" : ""}`) : null));
+    document.getElementById("pr-b").textContent = best() ?? "-";
+  }
+  const offKeys = docKeys((e) => { if (isSpace(e) && state !== "idle") { e.preventDefault(); if (!e.repeat) tap(); } });
+  status.textContent = "Pick a weight and unrack."; document.getElementById("pr-b").textContent = best() ?? "-";
+  pctIn.addEventListener("input", () => { document.getElementById("pr-b").textContent = best() ?? "-"; });
+  return () => { cancelAnimationFrame(raf); offKeys(); };
+}
+
+/* ---------- 12. shootout ---------- */
+function shootout(el) {
+  const SHOTS = 10, SIDES = ["left", "center", "right"];
+  let shot = 0, goals = 0, hist = [], reads = 0;
+  const status = $("div", { class: "card big" });
+  const btns = SIDES.map((s) => $("button", { on: { click: () => shoot(s) } }, s));
+  const again = $("button", { on: { click: reset } }, "new shootout");
+  const log = $("div", { class: "log" });
+  el.append(...header("shootout", "Ten penalty shots. Pick a side. The goalie studies your habits: what you pick most, and what you tend to pick after each shot. Beat him by being unpredictable. Picked his side? He saves 70%. Picked the other? You score 85%."),
+    status, $("div", { class: "row" }, ...btns, again),
+    $("div", { class: "stats" }, stat("shot", "so-s"), stat("goals", "so-g"), stat("goalie read you", "so-r"), stat("best", "so-b")), log);
+  function goalieGuess() {
+    if (hist.length < 2 || Math.random() < 0.25) return SIDES[Math.floor(Math.random() * 3)];
+    const prev = hist[hist.length - 1], score = { left: 0, center: 0, right: 0 };
+    hist.forEach((s) => { score[s] += 1; });                                   // overall habit
+    for (let i = 1; i < hist.length; i++) if (hist[i - 1] === prev) score[hist[i]] += 2;  // what follows your last pick
+    return SIDES.reduce((a, b) => (score[b] > score[a] ? b : a));
+  }
+  function shoot(side) {
+    if (shot >= SHOTS) return;
+    const g = goalieGuess(), read = g === side, goal = Math.random() < (read ? 0.3 : 0.85);
+    hist.push(side); shot += 1; goals += goal ? 1 : 0; reads += read ? 1 : 0;
+    log.prepend($("div", {}, $("span", { class: "dim" }, `#${shot} you ${side}, goalie ${g}. `),
+      $("span", { class: goal ? "g" : "r" }, goal ? "GOAL" : read ? "saved: he read you" : "off the post")));
+    if (shot >= SHOTS) {
+      if (goals > 0 && goals > store.get("so-best", -1)) store.set("so-best", goals);
+      const mix = SIDES.map((s) => `${s} ${hist.filter((h) => h === s).length}`).join(", ");
+      log.prepend($("div", { class: "b" }, `Final: ${goals}/10. Your mix: ${mix}. Perfectly random shooting averages ~6.7; every time he reads you costs about half a goal.`));
+      btns.forEach((b) => { b.disabled = true; });
+    }
+    refresh();
+  }
+  function refresh() {
+    status.textContent = shot >= SHOTS ? "Shootout over." : `Shot ${shot + 1} of ${SHOTS}: pick a side.`;
+    document.getElementById("so-s").textContent = `${shot}/${SHOTS}`; document.getElementById("so-g").textContent = goals;
+    document.getElementById("so-r").textContent = reads; document.getElementById("so-b").textContent = store.get("so-best", "-");
+  }
+  function reset() { shot = 0; goals = 0; reads = 0; hist = []; log.innerHTML = ""; btns.forEach((b) => { b.disabled = false; }); refresh(); }
+  reset();
+}
+
+/* ---------- 13. home run derby ---------- */
+function derby(el) {
+  const OUTS = 10, SWEET = 0.86, PITCHES = [["fastball", 0.85], ["slider", 1.05], ["changeup", 1.3], ["heater", 0.65]];
+  let raf = 0, outs = 0, hrs = 0, pos = 0, last = 0, dur = 1, pitch = null, live = false, wait = 0;
+  const m = meter();
+  const status = $("div", { class: "card big" });
+  const swing = $("button", { class: "go", style: "min-width:140px;touch-action:manipulation" }, "SWING (space)");
+  const again = $("button", { on: { click: reset } }, "new derby");
+  const log = $("div", { class: "log" });
+  swing.addEventListener("pointerdown", (e) => { e.preventDefault(); doSwing(); });
+  swing.addEventListener("click", keyClick(() => doSwing()));
+  el.append(...header("home-run-derby", "The pitch travels left to right. Swing when it crosses the green zone. Perfect timing is a home run; anything else you swing at is an out. Don't swing and it's just a take. Ten outs."),
+    status, m.track, $("div", { class: "row" }, swing, again),
+    $("div", { class: "stats" }, stat("home runs", "hr-h"), stat("outs", "hr-o"), stat("best", "hr-b")), log);
+  m.setZone(SWEET - 0.03, 0.06);
+  function throwPitch(now) {
+    pitch = PITCHES[Math.floor(Math.random() * PITCHES.length)]; dur = pitch[1] * (0.9 + Math.random() * 0.2);
+    pos = 0; live = true; last = now; status.textContent = `${pitch[0]} coming...`;
+  }
+  function loop(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (live) {
+      pos += dt / dur;
+      if (pos >= 1.05) { live = false; wait = now + 700; log.prepend($("div", { class: "dim" }, `took the ${pitch[0]}`)); }
+    } else if (outs < OUTS && now >= wait) throwPitch(now);
+    m.setMark(Math.min(1, pos));
+    raf = requestAnimationFrame(loop);
+  }
+  function doSwing() {
+    if (!live || outs >= OUTS) return;
+    live = false; wait = performance.now() + 900;
+    const off = pos - SWEET, a = Math.abs(off);
+    if (a <= 0.03) { hrs += 1; status.textContent = `HOME RUN, ${Math.round(440 - a * 2500)} ft`; log.prepend($("div", { class: "g" }, `HOME RUN on the ${pitch[0]}, ${Math.round(440 - a * 2500)} ft`)); }
+    else { outs += 1; status.textContent = `out ${outs}`; log.prepend($("div", { class: "r" }, `${a <= 0.08 ? (off < 0 ? "pulled it foul... out" : "popped up") : off < 0 ? "way out front" : "late, swung through"} (${pitch[0]})`)); }
+    if (outs >= OUTS) {
+      if (hrs > 0 && hrs > store.get("hr-best", -1)) store.set("hr-best", hrs);
+      status.textContent = `Derby over: ${hrs} home runs.`;
+    }
+    refresh();
+  }
+  function refresh() {
+    document.getElementById("hr-h").textContent = hrs; document.getElementById("hr-o").textContent = `${outs}/${OUTS}`;
+    document.getElementById("hr-b").textContent = store.get("hr-best", "-");
+  }
+  function reset() { outs = 0; hrs = 0; live = false; wait = performance.now() + 600; log.innerHTML = ""; status.textContent = "Get set..."; refresh(); }
+  const offKeys = docKeys((e) => { if (isSpace(e)) { e.preventDefault(); if (!e.repeat) doSwing(); } }), offUp = spaceGuard();
+  reset(); last = performance.now(); raf = requestAnimationFrame(loop);
+  return () => { cancelAnimationFrame(raf); offKeys(); offUp(); };
+}
+
+/* ---------- 14. free throws ---------- */
+function freeThrows(el) {
+  let raf = 0, last = 0, stage = "idle", aim = 0, power = 0, dir = 1, speed = 1.1, aimLock = 0, made = 0, shots = 0, mode = "ten", endAt = 0;
+  const aimM = meter(), powM = meter();
+  const status = $("div", { class: "card big" });
+  const btn = $("button", { class: "go", style: "min-width:140px;touch-action:manipulation" }, "SHOOT (space)");
+  const modeBtn = $("button", { on: { click: () => { if (stage !== "idle") return; mode = mode === "ten" ? "buzzer" : "ten"; modeBtn.textContent = mode === "ten" ? "mode: 10 shots" : "mode: 30s buzzer"; refresh(); } } }, "mode: 10 shots");
+  const go = $("button", { on: { click: start } }, "start");
+  btn.addEventListener("pointerdown", (e) => { e.preventDefault(); tap(); });
+  btn.addEventListener("click", keyClick(() => tap()));
+  el.append(...header("free-throws", "Two taps per shot: stop the aim marker in the green, then stop the power marker in the green. Both in is a make; dead center on both is a swish. Buzzer mode: as many makes as you can in 30 seconds, and the meters speed up as you heat up."),
+    $("div", { class: "row" }, modeBtn, go, btn), status, $("label", {}, "aim"), aimM.track, $("label", {}, "power"), powM.track,
+    $("div", { class: "stats" }, stat("makes", "ft-m"), stat("shots", "ft-s"), stat("best", "ft-b")));
+  aimM.setZone(0.4, 0.2); powM.setZone(0.62, 0.14);
+  const bestKey = () => "ft-" + mode;
+  function loop(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (stage === "aim" || stage === "power") {
+      const v = (stage === "aim" ? aim : power) + dir * speed * dt;
+      const c = Math.max(0, Math.min(1, v)); if (c !== v) dir = -dir;
+      if (stage === "aim") aim = c; else power = c;
+      aimM.setMark(aim); powM.setMark(stage === "power" ? power : 0);
+    }
+    if (mode === "buzzer" && stage !== "idle") {
+      const left = (endAt - now) / 1000;
+      status.textContent = `${Math.max(0, left).toFixed(1)}s · ${made} made`;
+      if (left <= 0) return finish();
+    }
+    raf = requestAnimationFrame(loop);
+  }
+  function tap() {
+    if (stage === "aim") { aimLock = aim; stage = "power"; power = 0; dir = 1; }
+    else if (stage === "power") {
+      const aOk = Math.abs(aimLock - 0.5) <= 0.1, pOk = Math.abs(power - 0.69) <= 0.07, swish = Math.abs(aimLock - 0.5) <= 0.03 && Math.abs(power - 0.69) <= 0.02;
+      shots += 1; made += aOk && pOk ? 1 : 0;
+      if (mode === "ten") status.textContent = aOk && pOk ? (swish ? "SWISH" : "in off the rim") : !aOk ? (aimLock < 0.5 ? "missed left" : "missed right") : power < 0.69 ? "short" : "long";
+      if (mode === "buzzer") speed = aOk && pOk ? Math.min(2.6, speed + 0.12) : 1.1;
+      refresh();
+      if (mode === "ten" && shots >= 10) return finish();
+      stage = "aim"; aim = 0; dir = 1;
+    }
+  }
+  function start() {
+    if (stage !== "idle") return;
+    made = 0; shots = 0; speed = 1.1; aim = 0; dir = 1; stage = "aim"; go.disabled = true; modeBtn.disabled = true;
+    last = performance.now(); endAt = last + 30000; if (mode === "ten") status.textContent = "Shot 1: aim..."; refresh();
+    raf = requestAnimationFrame(loop);
+  }
+  function finish() {
+    cancelAnimationFrame(raf); stage = "idle"; go.disabled = false; modeBtn.disabled = false;
+    if (made > 0 && made > store.get(bestKey(), -1)) store.set(bestKey(), made);
+    status.textContent = mode === "ten" ? `${made}/10 from the line.` : `Buzzer! ${made} makes in 30 seconds.`; refresh();
+  }
+  function refresh() {
+    document.getElementById("ft-m").textContent = made; document.getElementById("ft-s").textContent = shots;
+    document.getElementById("ft-b").textContent = store.get(bestKey(), "-");
+  }
+  const offKeys = docKeys((e) => { if (isSpace(e) && stage !== "idle") { e.preventDefault(); if (!e.repeat) tap(); } });
+  status.textContent = "Press start."; refresh();
+  return () => { cancelAnimationFrame(raf); offKeys(); };
+}
+
 /* ---------- router ---------- */
 const GAMES = [
-  { id: "market", name: "make-a-market", run: market },
-  { id: "fair", name: "fair-price", run: fairPrice },
-  { id: "kelly", name: "kelly-coin", run: kelly },
-  { id: "four", name: "four-in-a-row", run: fourRow },
-  { id: "ttt", name: "tic-tac-toe", run: ticTacToe },
-  { id: "mines", name: "mines", run: mines },
-  { id: "meet", name: "meet-day", run: meetDay },
+  { id: "market", name: "make-a-market", run: market, group: "trade" },
+  { id: "fair", name: "fair-price", run: fairPrice, group: "trade" },
+  { id: "kelly", name: "kelly-coin", run: kelly, group: "trade" },
+  { id: "poker", name: "pot-odds", run: potOdds, group: "trade" },
+  { id: "count", name: "card-counting", run: counting, group: "trade" },
+  { id: "four", name: "four-in-a-row", run: fourRow, group: "brain" },
+  { id: "ttt", name: "tic-tac-toe", run: ticTacToe, group: "brain" },
+  { id: "mines", name: "mines", run: mines, group: "brain" },
+  { id: "chess", name: "chess-vision", run: chessVision, group: "brain" },
+  { id: "meet", name: "meet-day", run: meetDay, group: "sport" },
+  { id: "pr", name: "pr-chase", run: prChase, group: "sport" },
+  { id: "shoot", name: "shootout", run: shootout, group: "sport" },
+  { id: "derby", name: "hr-derby", run: derby, group: "sport" },
+  { id: "ft", name: "free-throws", run: freeThrows, group: "sport" },
 ];
 const tabs = document.getElementById("tabs"), stage = document.getElementById("stage");
-GAMES.forEach((g, i) => tabs.append($("a", { href: "#" + g.id, "data-id": g.id }, `[${i + 1}] ${g.name}`)));
+["trade", "brain", "sport"].forEach((grp) => {
+  const row = $("div", { class: "grp" }, $("span", { class: "gl" }, grp));
+  GAMES.forEach((g, i) => { if (g.group === grp) row.append($("a", { href: "#" + g.id, "data-id": g.id }, i < 9 ? `[${i + 1}] ${g.name}` : g.name)); });
+  tabs.append(row);
+});
 let cleanup = null, stageRef = stage;
 window.addEventListener("hashchange", routeTo);
 function routeTo() {
@@ -613,6 +1018,7 @@ function routeTo() {
 document.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (stageRef.dataset.noshortcut) return;     // a live drill uses the digit keys itself
   const n = parseInt(e.key, 10);
   if (n >= 1 && n <= GAMES.length) location.hash = GAMES[n - 1].id;
 });
